@@ -1,0 +1,40 @@
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Secrets / local env
+.env
+.env.*
+.streamlit/secrets.toml
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Generated demo data, models, and scores
+artifacts/*
+!artifacts/.gitkeep
+artifacts/external/
+data/demo/raw/*
+!data/demo/raw/.gitkeep
+data/demo/processed/*
+!data/demo/processed/.gitkeep
+data/external/
+
+# Logs
+*.log
