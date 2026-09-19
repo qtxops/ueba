@@ -18,13 +18,14 @@ def generate_demo_logs(output_dir: str | Path, seed: int = 42) -> dict[str, Path
     logons: list[dict] = []
     devices: list[dict] = []
     files: list[dict] = []
+    admin_events: list[dict] = []
     labels: list[dict] = []
     event_id = 1
 
-    attacks = {
-        ("ACM0003", pd.Timestamp("2026-02-25")): "After-hours USB exfiltration",
-        ("ACM0011", pd.Timestamp("2026-02-27")): "Bulk sensitive-file collection",
-        ("ACM0018", pd.Timestamp("2026-03-02")): "Compromised account on unusual host",
+    attack_windows = {
+        "ACM0003": (pd.Timestamp("2026-02-24"), pd.Timestamp("2026-02-28"), "Slow removable-media exfiltration"),
+        "ACM0011": (pd.Timestamp("2026-02-26"), pd.Timestamp("2026-03-03"), "Gradual privilege escalation"),
+        "ACM0018": (pd.Timestamp("2026-03-01"), pd.Timestamp("2026-03-04"), "Low-volume activity from a new host"),
     }
 
     for user_index, user in enumerate(users):
@@ -33,7 +34,9 @@ def generate_demo_logs(output_dir: str | Path, seed: int = 42) -> dict[str, Path
         start_hour = float(rng.normal(8.8, 0.45))
 
         for day in dates:
-            malicious_scenario = attacks.get((user, day), "")
+            attack = attack_windows.get(user)
+            malicious_scenario = attack[2] if attack and attack[0] <= day <= attack[1] else ""
+            attack_day = (day - attack[0]).days + 1 if malicious_scenario else 0
             is_weekend = day.dayofweek >= 5
             is_active = rng.random() < (0.20 if is_weekend else 0.96)
             labels.append(
@@ -56,25 +59,33 @@ def generate_demo_logs(output_dir: str | Path, seed: int = 42) -> dict[str, Path
             executable_count = int(rng.random() < 0.03)
             bytes_scale = 90_000
 
-            if malicious_scenario == "After-hours USB exfiltration":
-                login_hour = 2.15
-                file_count = 190
-                usb_connects = 2
-                removable_count = 150
-                sensitive_count = 75
-                bytes_scale = 3_000_000
-            elif malicious_scenario == "Bulk sensitive-file collection":
-                login_hour = 21.4
-                file_count = 280
-                sensitive_count = 160
-                bytes_scale = 1_800_000
-            elif malicious_scenario == "Compromised account on unusual host":
-                login_hour = 1.35
+            if malicious_scenario == "Slow removable-media exfiltration":
+                login_hour = 18.6 + 0.22 * attack_day
+                file_count += 8 + 2 * attack_day
+                usb_connects = 1
+                removable_count = 3 + attack_day
+                sensitive_count = 4 + attack_day
+                bytes_scale = 240_000 + 35_000 * attack_day
+            elif malicious_scenario == "Gradual privilege escalation":
+                file_count += 2 * attack_day
+                sensitive_count = 1 + attack_day
+                bytes_scale = 140_000
+                for privilege_number in range(attack_day):
+                    admin_time = day + pd.to_timedelta(10 + privilege_number * 0.4, unit="h")
+                    admin_events.append(
+                        {
+                            "id": f"A{event_id}", "date": admin_time.isoformat(), "user": user, "pc": pc,
+                            "action": "grant_permission", "status": "Success",
+                            "resource": f"role-{privilege_number % 3}",
+                        }
+                    )
+                    event_id += 1
+            elif malicious_scenario == "Low-volume activity from a new host":
                 pc = "PC-999"
-                file_count = 135
-                sensitive_count = 45
-                executable_count = 12
-                bytes_scale = 900_000
+                file_count += 5
+                sensitive_count = 2 + attack_day
+                executable_count = 1
+                bytes_scale = 180_000
 
             login_time = day + pd.to_timedelta(login_hour, unit="h")
             logout_time = login_time + pd.to_timedelta(float(rng.uniform(7.0, 9.5)), unit="h")
@@ -132,11 +143,12 @@ def generate_demo_logs(output_dir: str | Path, seed: int = 42) -> dict[str, Path
         "logon": output / "logon.csv",
         "device": output / "device.csv",
         "file": output / "file.csv",
+        "admin": output / "admin.csv",
         "labels": output / "labels.csv",
     }
     pd.DataFrame(logons).to_csv(paths["logon"], index=False)
     pd.DataFrame(devices).to_csv(paths["device"], index=False)
     pd.DataFrame(files).to_csv(paths["file"], index=False)
+    pd.DataFrame(admin_events).to_csv(paths["admin"], index=False)
     pd.DataFrame(labels).to_csv(paths["labels"], index=False)
     return paths
-
