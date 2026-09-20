@@ -39,6 +39,7 @@ def process_event_batch(
     database_path: str | Path,
     artifact_dir: str | Path,
     retrain: bool = False,
+    force_rescore: bool = False,
 ) -> dict[str, Any]:
     """Persist new events and automatically score the affected source.
 
@@ -58,7 +59,7 @@ def process_event_batch(
         ingestion_id = begin_ingestion(connection, source_dataset, len(normalized))
         try:
             inserted = ingest_events(connection, normalized)
-            if inserted == 0:
+            if inserted == 0 and not retrain and not force_rescore:
                 finish_ingestion(connection, ingestion_id, 0, message="All received events were duplicates")
                 return {
                     "ingestion_id": ingestion_id,

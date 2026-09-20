@@ -14,6 +14,12 @@ Core v4 adds source-specific review-budget policies and correlates related alert
 into multi-day incidents. Analysts work from the incident queue rather than being
 asked to triage every raw model or rule signal.
 
+Core v5 adds an authenticated FastAPI service, administrator/analyst roles,
+immutable audit events, explicit candidate-model promotion and rollback, a
+background reconciliation worker, and an API-only Streamlit operations console.
+Docker Compose runs these as separate services while sharing a WAL-enabled SQLite
+database and model volume for a single-host deployment.
+
 The repository includes a deterministic synthetic dataset so the complete demo
 works without downloading private or very large security logs. The same pipeline
 can be adapted to the CERT Insider Threat dataset by mapping its three source
@@ -45,6 +51,44 @@ streamlit run app.py
 ```
 
 The dashboard opens at `http://localhost:8501`.
+
+## Run the operational service
+
+For a local process-based run, create the first account and start the API before
+opening the API-backed console:
+
+```bash
+export SENTINEL_SECRET_KEY="$(python -c 'import secrets; print(secrets.token_hex(32))')"
+export SENTINEL_ADMIN_USERNAME=admin
+export SENTINEL_ADMIN_PASSWORD='replace-this-with-a-strong-password'
+uvicorn src.api:app --host 127.0.0.1 --port 8000
+
+# In a second terminal
+SENTINEL_API_URL=http://127.0.0.1:8000 streamlit run service_app.py
+
+# In a third terminal
+python -m scripts.worker --interval 60
+```
+
+The API documentation is at `http://localhost:8000/docs`. The first configured
+administrator can create analyst accounts through `POST /users`; an interactive
+CLI is also available as `python -m scripts.create_user USERNAME --role analyst`.
+
+For the containerized single-host deployment:
+
+```bash
+cp .env.example .env
+# Replace every placeholder in .env, then:
+docker compose up --build
+```
+
+The operations console is at `http://localhost:8501`, and the authenticated API
+is at `http://localhost:8000`. The API must pass its health check before Compose
+starts the dashboard or worker. Runtime state lives in the `sentinel-data` named
+volume.
+
+The original `app.py` remains the direct-database research console. Deployed
+users should use `service_app.py`, which communicates only through the API.
 
 ## Public Kaggle datasets
 
@@ -101,6 +145,12 @@ Suppressions require a reason and expiration date and remain visible in an audit
 registry. The network dataset's deterministic rule layer is disabled by default
 because its event semantics do not support the same rules as CERT or administrator
 activity.
+
+Retraining through `POST /models/{source}/retrain` creates a candidate artifact;
+it does not silently change production scoring. An administrator reviews the
+reported metrics and promotes it through `POST /models/{version}/promote`. A
+previous registered model becomes archived and remains promotable as a rollback.
+If rescoring fails during promotion, the previous active artifact is restored.
 
 Run the tests with:
 
@@ -188,8 +238,15 @@ python scripts/ingest_logs.py --raw-dir incoming/day-30 --source headquarters --
 
 ## Project boundaries
 
-This is a lab prototype, not a production SIEM replacement. A high risk score
-means that observed behavior is unusual and worth investigating; it does not
-prove malicious intent. Production deployment would additionally require secure
-ingestion, access controls, drift monitoring, analyst feedback, privacy review,
-and organization-specific calibration.
+This is now a working, single-host UEBA application rather than a dashboard-only
+demo, but it is not a production SIEM replacement. A high risk score means that
+observed behavior is unusual and worth investigating; it does not prove malicious
+intent. The service has authenticated ingestion, role checks, audit records,
+case workflows, controlled model activation, health checks, and a worker.
+
+SQLite in WAL mode is intentional for a lab or one-server deployment. It is not
+the final storage layer for horizontal scaling or high ingestion concurrency.
+A multi-node deployment still requires a PostgreSQL migration, TLS/reverse proxy,
+external identity provider or SSO, centralized secret management, backups,
+metrics/log shipping, retention/privacy controls, and organization-specific
+security review.

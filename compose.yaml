@@ -1,0 +1,52 @@
+name: sentinel-ueba
+
+x-service-environment: &service-environment
+  SENTINEL_DB_PATH: /app/artifacts/sentinel_ueba.db
+  SENTINEL_ARTIFACT_DIR: /app/artifacts/live
+  SENTINEL_SECRET_KEY: ${SENTINEL_SECRET_KEY:?Copy .env.example to .env and set SENTINEL_SECRET_KEY}
+  SENTINEL_ADMIN_USERNAME: ${SENTINEL_ADMIN_USERNAME:-admin}
+  SENTINEL_ADMIN_PASSWORD: ${SENTINEL_ADMIN_PASSWORD:?Set SENTINEL_ADMIN_PASSWORD in .env}
+  SENTINEL_REQUIRE_SECURE_CONFIG: "1"
+
+services:
+  api:
+    build: .
+    command: ["uvicorn", "src.api:app", "--host", "0.0.0.0", "--port", "8000"]
+    environment: *service-environment
+    volumes:
+      - sentinel-data:/app/artifacts
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  dashboard:
+    build: .
+    command: ["streamlit", "run", "service_app.py", "--server.address", "0.0.0.0", "--server.port", "8501"]
+    environment:
+      SENTINEL_API_URL: http://api:8000
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "8501:8501"
+    restart: unless-stopped
+
+  worker:
+    build: .
+    command: ["python", "-m", "scripts.worker", "--interval", "60"]
+    environment: *service-environment
+    volumes:
+      - sentinel-data:/app/artifacts
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  sentinel-data:

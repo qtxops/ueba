@@ -170,14 +170,57 @@ CREATE TABLE IF NOT EXISTS suppressions (
     active INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS users (
+    username TEXT PRIMARY KEY,
+    password_hash TEXT NOT NULL,
+    role TEXT NOT NULL,
+    disabled INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS audit_log (
+    audit_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    actor TEXT NOT NULL,
+    action TEXT NOT NULL,
+    target_type TEXT NOT NULL,
+    target_id TEXT NOT NULL,
+    details_json TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS model_registry (
+    model_version TEXT PRIMARY KEY,
+    source_dataset TEXT NOT NULL,
+    status TEXT NOT NULL,
+    artifact_path TEXT NOT NULL,
+    metrics_json TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL,
+    promoted_at TEXT,
+    promoted_by TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_model_registry_source_status
+ON model_registry(source_dataset, status);
+
+CREATE TABLE IF NOT EXISTS job_runs (
+    job_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    job_name TEXT NOT NULL,
+    status TEXT NOT NULL,
+    details_json TEXT NOT NULL DEFAULT '{}',
+    started_at TEXT NOT NULL,
+    completed_at TEXT
+);
 """
 
 
 def connect_database(path: str | Path) -> sqlite3.Connection:
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
-    connection = sqlite3.connect(target)
+    connection = sqlite3.connect(target, timeout=30)
     connection.row_factory = sqlite3.Row
+    connection.execute("PRAGMA journal_mode = WAL")
+    connection.execute("PRAGMA busy_timeout = 30000")
     connection.executescript(SCHEMA)
     case_columns = {row[1] for row in connection.execute("PRAGMA table_info(cases)").fetchall()}
     if "assigned_to" not in case_columns:
@@ -333,7 +376,7 @@ def persist_model_run(
 def database_summary(connection: sqlite3.Connection) -> dict[str, int]:
     return {
         table: int(connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0])
-        for table in ["events", "model_runs", "entity_scores", "alerts", "incidents", "cases", "suppressions"]
+        for table in ["events", "model_runs", "entity_scores", "alerts", "incidents", "cases", "suppressions", "job_runs"]
     }
 
 

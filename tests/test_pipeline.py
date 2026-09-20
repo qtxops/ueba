@@ -21,6 +21,7 @@ from src.incidents import (
 )
 from src.modeling import evaluate
 from src.engine import process_event_batch
+from src.model_registry import build_candidate, list_models, promote_model
 from src.storage import (
     connect_database,
     database_summary,
@@ -129,6 +130,32 @@ class PipelineTest(unittest.TestCase):
         self.assertFalse(second["rescored"])
         self.assertEqual(third["inserted_events"], 1)
         self.assertFalse(third["model_retrained"])
+
+    def test_candidate_model_requires_explicit_promotion(self) -> None:
+        events = self.events.copy()
+        events["source_dataset"] = "registry_test"
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            database = root / "ueba.db"
+            artifacts = root / "artifacts"
+            process_event_batch(events, database, artifacts, retrain=True)
+            candidate = build_candidate(database, artifacts, "registry_test")
+            before = list_models(database, "registry_test")
+            result = promote_model(
+                database, artifacts, candidate["model_version"], "test-admin"
+            )
+            second_candidate = build_candidate(database, artifacts, "registry_test")
+            promote_model(database, artifacts, second_candidate["model_version"], "test-admin")
+            rollback = promote_model(
+                database, artifacts, candidate["model_version"], "test-admin"
+            )
+            after = list_models(database, "registry_test")
+        self.assertEqual(before[0]["status"], "candidate")
+        self.assertEqual(result["promoted_model"], candidate["model_version"])
+        self.assertEqual(rollback["promoted_model"], candidate["model_version"])
+        statuses = {model["model_version"]: model["status"] for model in after}
+        self.assertEqual(statuses[candidate["model_version"]], "active")
+        self.assertEqual(statuses[second_candidate["model_version"]], "archived")
 
 
 if __name__ == "__main__":

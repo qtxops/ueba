@@ -158,7 +158,7 @@ def apply_policy(connection: sqlite3.Connection, source_dataset: str) -> dict[st
     connection.execute(
         """UPDATE alerts SET status = 'open'
            WHERE source_dataset = ? AND model_version = ? AND alert_type = 'ml_anomaly'
-             AND score >= ? AND status = 'below_policy'""",
+             AND score >= ? AND status IN ('below_policy', 'superseded')""",
         (source_dataset, version, ml_threshold),
     )
 
@@ -180,7 +180,7 @@ def apply_policy(connection: sqlite3.Connection, source_dataset: str) -> dict[st
         connection.execute(
             """UPDATE alerts SET status = 'open'
                WHERE source_dataset = ? AND model_version = ? AND alert_type = 'rule_match'
-                 AND score >= ? AND status IN ('below_policy', 'policy_disabled')""",
+                 AND score >= ? AND status IN ('below_policy', 'policy_disabled', 'superseded')""",
             (source_dataset, version, rule_threshold),
         )
     else:
@@ -190,6 +190,16 @@ def apply_policy(connection: sqlite3.Connection, source_dataset: str) -> dict[st
                  AND status IN ('open', 'below_policy')""",
             (source_dataset, version),
         )
+    incident_ids = [
+        row[0] for row in connection.execute(
+            """SELECT DISTINCT ia.incident_id
+               FROM incident_alerts ia JOIN alerts a ON a.alert_id = ia.alert_id
+               WHERE a.source_dataset = ?""",
+            (source_dataset,),
+        ).fetchall()
+    ]
+    for incident_id in incident_ids:
+        _refresh_incident(connection, int(incident_id))
     connection.commit()
     counts = connection.execute(
         """SELECT
