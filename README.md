@@ -1,5 +1,9 @@
 # SentinelUEBA
 
+**Start here:** [Complete runbook](docs/RUNNING.md) for a fresh clone, local demo,
+authenticated service, Docker Compose, tests, data imports, and a presentation
+walkthrough.
+
 SentinelUEBA is an explainable User and Entity Behavior Analytics system for
 insider-threat investigation. It converts login, removable-device, and file
 activity logs into daily behavioral profiles, trains an unsupervised Isolation
@@ -38,8 +42,7 @@ files to the documented schemas below.
 
 ## Quick start
 
-Python 3.10-3.13 is recommended because scientific Python packages may lag behind
-brand-new Python releases.
+Python 3.11 is the tested choice. Run these commands from the repository root.
 
 ```bash
 python -m venv .venv
@@ -51,6 +54,8 @@ streamlit run app.py
 ```
 
 The dashboard opens at `http://localhost:8501`.
+Generated data, the SQLite database, trained models, and scores are created locally
+under `data/demo/raw/` and `artifacts/`; they are intentionally not committed.
 
 ## Run the operational service
 
@@ -80,6 +85,8 @@ For the containerized single-host deployment:
 cp .env.example .env
 # Replace every placeholder in .env, then:
 docker compose up --build
+# In another terminal, seed the shared volume for a populated demo:
+docker compose exec api python scripts/bootstrap_demo.py
 ```
 
 The operations console is at `http://localhost:8501`, and the authenticated API
