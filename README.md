@@ -3,6 +3,8 @@
 **Start here:** [Complete runbook](docs/RUNNING.md) for a fresh clone, local demo,
 authenticated service, Docker Compose, tests, data imports, and a presentation
 walkthrough.
+For the Milestone 1 explanation, results, project status, and practice answers,
+see the [viva script](script.md).
 
 SentinelUEBA is an explainable User and Entity Behavior Analytics system for
 insider-threat investigation. It converts login, removable-device, and file
